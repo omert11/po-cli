@@ -3,7 +3,7 @@
 [![CI](https://github.com/omert11/po-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/omert11/po-cli/actions/workflows/ci.yml)
 [![Release](https://github.com/omert11/po-cli/actions/workflows/release.yml/badge.svg)](https://github.com/omert11/po-cli/actions/workflows/release.yml)
 
-Rust CLI for analyzing and updating Django gettext `.po` files. Same validation rules and update semantics as the [po-mcp](https://github.com/omert11/po-mcp) MCP server, packaged as a single static binary.
+Rust CLI for analyzing and updating Django gettext `.po` files. Single static binary — analyze stats, validate translations (variables, HTML, URLs, JS), update in place.
 
 ## Features
 

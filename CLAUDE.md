@@ -1,6 +1,6 @@
 # po-cli
 
-Django gettext `.po` dosyaları için Rust CLI. po-mcp ekosisteminin standalone binary versiyonu — analyze + validate + update tek pakette.
+Django gettext `.po` dosyaları için Rust CLI. Single static binary — analyze stats, validate translations (variables, HTML, URLs, JS), update in place.
 
 ## Stack
 
@@ -59,10 +59,6 @@ skills/po-cli/SKILL.md   Claude Code skill (translation workflow)
 - `cargo clippy --all-targets --all-features -- -D warnings` temiz olmalı
 - Hatalar `anyhow::Result` ile döner, üst katmana `with_context` ile zenginleştirilir
 - `polib` `MessageView` / `MessageMutView` trait'leri import edilmeden `Message` üzerinde method çağrılamaz — `use polib::message::{MessageView, MessageMutView}` lazım
-
-## İlişkili Projeler
-
-- **po-mcp** (TypeScript, MCP server): `~/Desktop/git/mcp/po-mcp` — aynı validation kuralları, Claude Code MCP entegrasyonu
 
 ## Skill
 
