@@ -1,0 +1,6 @@
+/target
+solo.yml
+.DS_Store
+*.swp
+CLAUDE.local.md
+.claude/settings.local.json
