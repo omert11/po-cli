@@ -31,53 +31,49 @@ fn patterns() -> &'static Patterns {
 }
 
 #[derive(Default, Debug)]
-struct Extracted {
-    variables: HashSet<String>,
-    html_tags: HashSet<String>,
-    urls: HashSet<String>,
-    js_codes: HashSet<String>,
+struct Extracted<'a> {
+    variables: HashSet<&'a str>,
+    html_tags: HashSet<&'a str>,
+    urls: HashSet<&'a str>,
+    js_codes: HashSet<&'a str>,
 }
 
-fn extract(text: &str) -> Extracted {
+fn extract(text: &str) -> Extracted<'_> {
     let p = patterns();
     let mut e = Extracted::default();
 
-    for m in p.python_old_style.find_iter(text) {
-        e.variables.insert(m.as_str().to_string());
-    }
-    for m in p.python_format.find_iter(text) {
-        e.variables.insert(m.as_str().to_string());
-    }
-    for m in p.django_var.find_iter(text) {
-        e.variables.insert(m.as_str().to_string());
-    }
-    for m in p.django_tag.find_iter(text) {
-        e.variables.insert(m.as_str().to_string());
+    for r in [
+        &p.python_old_style,
+        &p.python_format,
+        &p.django_var,
+        &p.django_tag,
+    ] {
+        for m in r.find_iter(text) {
+            e.variables.insert(m.as_str());
+        }
     }
     for m in p.html_tag.find_iter(text) {
-        e.html_tags.insert(m.as_str().to_string());
+        e.html_tags.insert(m.as_str());
     }
     for m in p.url.find_iter(text) {
-        e.urls.insert(m.as_str().to_string());
+        e.urls.insert(m.as_str());
     }
     for m in p.js_code.find_iter(text) {
-        e.js_codes.insert(m.as_str().to_string());
+        e.js_codes.insert(m.as_str());
     }
 
     e
 }
 
 pub fn validate(translations: &[TranslationEntry], strict: bool) -> ValidationOutput {
-    let mut results: Vec<ValidationResult> = Vec::with_capacity(translations.len());
+    let mut invalids: Vec<ValidationResult> = Vec::new();
 
     for t in translations {
         let mut issues: Vec<String> = Vec::new();
-        let warnings: Vec<String> = Vec::new();
-
-        let src = extract(&t.msgid);
-        let tgt = extract(&t.msgstr);
 
         if strict {
+            let src = extract(&t.msgid);
+            let tgt = extract(&t.msgstr);
             check_set("variables", &src.variables, &tgt.variables, &mut issues);
             check_set("HTML tags", &src.html_tags, &tgt.html_tags, &mut issues);
             check_exact("URL", &src.urls, &tgt.urls, &mut issues);
@@ -88,36 +84,32 @@ pub fn validate(translations: &[TranslationEntry], strict: bool) -> ValidationOu
             issues.push("Translation is empty".to_string());
         }
 
-        let valid = issues.is_empty();
-
-        results.push(ValidationResult {
-            msgid: t.msgid.clone(),
-            msgstr: t.msgstr.clone(),
-            valid,
-            issues,
-            warnings,
-        });
+        if !issues.is_empty() {
+            invalids.push(ValidationResult {
+                msgid: t.msgid.clone(),
+                msgstr: t.msgstr.clone(),
+                issues,
+            });
+        }
     }
 
-    let invalid_count = results.iter().filter(|r| !r.valid).count();
     let total = translations.len();
-    let valid_overall = invalid_count == 0;
-    let invalids: Vec<ValidationResult> = results.into_iter().filter(|r| !r.valid).collect();
-
+    let valid = invalids.is_empty();
     ValidationOutput {
         invalids,
         total,
-        valid: valid_overall,
+        valid,
     }
 }
 
-fn check_set(label: &str, src: &HashSet<String>, tgt: &HashSet<String>, issues: &mut Vec<String>) {
-    let missing: Vec<&String> = src.difference(tgt).collect();
-    let extra: Vec<&String> = tgt.difference(src).collect();
+fn check_set(label: &str, src: &HashSet<&str>, tgt: &HashSet<&str>, issues: &mut Vec<String>) {
+    let missing: Vec<&&str> = src.difference(tgt).collect();
+    let extra: Vec<&&str> = tgt.difference(src).collect();
     if !missing.is_empty() {
         let joined = missing
             .iter()
-            .map(|s| s.as_str())
+            .copied()
+            .copied()
             .collect::<Vec<_>>()
             .join(", ");
         issues.push(format!("Missing {label}: {joined}"));
@@ -125,14 +117,15 @@ fn check_set(label: &str, src: &HashSet<String>, tgt: &HashSet<String>, issues: 
     if !extra.is_empty() {
         let joined = extra
             .iter()
-            .map(|s| s.as_str())
+            .copied()
+            .copied()
             .collect::<Vec<_>>()
             .join(", ");
         issues.push(format!("Extra {label}: {joined}"));
     }
 }
 
-fn check_exact(label: &str, src: &HashSet<String>, tgt: &HashSet<String>, issues: &mut Vec<String>) {
+fn check_exact(label: &str, src: &HashSet<&str>, tgt: &HashSet<&str>, issues: &mut Vec<String>) {
     for url in src.difference(tgt) {
         issues.push(format!("{label} changed or missing: {url}"));
     }

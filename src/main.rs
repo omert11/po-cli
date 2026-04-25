@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod commands;
 mod parser;
 mod types;
+mod util;
 mod validator;
 
 #[derive(Parser)]

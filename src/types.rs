@@ -34,9 +34,7 @@ pub struct TranslationEntry {
 pub struct ValidationResult {
     pub msgid: String,
     pub msgstr: String,
-    pub valid: bool,
     pub issues: Vec<String>,
-    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,15 +1,14 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use colored::Colorize;
 use polib::message::{MessageMutView, MessageView};
 use polib::po_file;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
 use crate::parser::po_parser;
-use crate::types::{
-    TranslationEntry, UpdateResult, ValidateAndUpdateOutput, ValidationOutput,
-};
+use crate::types::{TranslationEntry, UpdateResult, ValidateAndUpdateOutput, ValidationOutput};
+use crate::util::truncate;
 use crate::validator;
 
 pub fn run(
@@ -20,68 +19,61 @@ pub fn run(
     force: bool,
     json: bool,
 ) -> Result<()> {
-    if !po_file.exists() {
-        bail!("PO file not found: {}", po_file.display());
-    }
-    if !translations_file.exists() {
-        bail!(
-            "Translations JSON file not found: {}",
-            translations_file.display()
-        );
-    }
-
     let raw = fs::read_to_string(translations_file).with_context(|| {
         format!(
             "Failed to read translations file: {}",
             translations_file.display()
         )
     })?;
-    let translations: Vec<TranslationEntry> =
-        serde_json::from_str(&raw).context("Translations JSON must be an array of {msgid, msgstr, context}")?;
+    let translations: Vec<TranslationEntry> = serde_json::from_str(&raw)
+        .context("Translations JSON must be an array of {msgid, msgstr, context}")?;
 
     let validation = validator::validate(&translations, strict);
     let should_update = validation.valid || force;
 
-    let output = if !should_update {
-        ValidateAndUpdateOutput {
+    if !should_update {
+        let output = ValidateAndUpdateOutput {
             message: format!(
                 "Validation failed: {} invalid. Use --force to update anyway.",
                 validation.invalids.len()
             ),
             validation,
             update: None,
-        }
+        };
+        return emit(&output, dry_run, json);
+    }
+
+    let to_apply: Vec<TranslationEntry> = if force {
+        translations.clone()
     } else {
-        let invalid_msgids: std::collections::HashSet<String> = validation
+        let invalid_msgids: HashSet<&str> = validation
             .invalids
             .iter()
-            .map(|r| r.msgid.clone())
+            .map(|r| r.msgid.as_str())
             .collect();
-
-        let to_apply: Vec<TranslationEntry> = if force {
-            translations.clone()
-        } else {
-            translations
-                .iter()
-                .filter(|t| !invalid_msgids.contains(&t.msgid))
-                .cloned()
-                .collect()
-        };
-
-        let update = apply_to_po(po_file, &to_apply, dry_run);
-        let message = build_message(&validation, &update, dry_run, force);
-
-        ValidateAndUpdateOutput {
-            validation,
-            update: Some(update),
-            message,
-        }
+        translations
+            .iter()
+            .filter(|t| !invalid_msgids.contains(t.msgid.as_str()))
+            .cloned()
+            .collect()
     };
 
+    let update = apply_to_po(po_file, &to_apply, dry_run);
+    let message = build_message(&validation, &update, dry_run, force);
+
+    let output = ValidateAndUpdateOutput {
+        validation,
+        update: Some(update),
+        message,
+    };
+    emit(&output, dry_run, json)
+}
+
+fn emit(output: &ValidateAndUpdateOutput, dry_run: bool, json: bool) -> Result<()> {
     if json {
-        println!("{}", serde_json::to_string_pretty(&output)?);
+        println!("{}", serde_json::to_string_pretty(output)?);
     } else {
-        print_human(&output, dry_run);
+        print_human(output, dry_run);
     }
     Ok(())
 }
@@ -89,73 +81,42 @@ pub fn run(
 fn apply_to_po(po_file: &Path, translations: &[TranslationEntry], dry_run: bool) -> UpdateResult {
     let mut errors: Vec<String> = Vec::new();
 
-    let raw = match fs::read_to_string(po_file) {
-        Ok(s) => s,
-        Err(e) => {
-            return UpdateResult {
-                success: false,
-                updated_entries: 0,
-                file_path: po_file.display().to_string(),
-                errors: vec![format!("Failed to read PO file: {e}")],
-            };
-        }
-    };
-    let cleaned = po_parser::preprocess_po_content(&raw);
-
-    let tmp_path = std::env::temp_dir().join(format!(
-        "po-cli-update-{}-{}",
-        std::process::id(),
-        po_file
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "input.po".to_string())
-    ));
-    if let Err(e) = fs::write(&tmp_path, &cleaned) {
-        return UpdateResult {
-            success: false,
-            updated_entries: 0,
-            file_path: po_file.display().to_string(),
-            errors: vec![format!("Failed to write temp PO file: {e}")],
-        };
-    }
-
-    let mut catalog = match po_file::parse(&tmp_path) {
+    let mut catalog = match po_parser::parse_cleaned(po_file) {
         Ok(c) => c,
         Err(e) => {
-            let _ = fs::remove_file(&tmp_path);
             return UpdateResult {
                 success: false,
                 updated_entries: 0,
                 file_path: po_file.display().to_string(),
-                errors: vec![format!("Failed to parse PO file: {e}")],
+                errors: vec![format!("{e:#}")],
             };
         }
     };
-    let _ = fs::remove_file(&tmp_path);
 
-    let mut map: HashMap<(String, String), &TranslationEntry> = HashMap::new();
+    let mut map: HashMap<(&str, &str), &TranslationEntry> = HashMap::new();
     for t in translations {
-        let key = (t.context.clone().unwrap_or_default(), t.msgid.clone());
-        map.insert(key, t);
+        let ctx = t.context.as_deref().unwrap_or("");
+        map.insert((ctx, t.msgid.as_str()), t);
     }
 
     let mut updated = 0usize;
     for mut message in catalog.messages_mut() {
-        let context = message.msgctxt().unwrap_or("").to_string();
-        let msgid = message.msgid().to_string();
-        let key = (context, msgid);
-        if let Some(t) = map.get(&key) {
-            if message.is_singular() {
-                if let Err(e) = message.set_msgstr(t.msgstr.clone()) {
-                    errors.push(format!("Failed to set msgstr for '{}': {e}", t.msgid));
-                    continue;
-                }
-                if message.is_fuzzy() {
-                    message.flags_mut().remove_flag("fuzzy");
-                }
-                updated += 1;
-            }
+        let ctx = message.msgctxt().unwrap_or("");
+        let msgid = message.msgid();
+        let Some(t) = map.get(&(ctx, msgid)).copied() else {
+            continue;
+        };
+        if !message.is_singular() {
+            continue;
         }
+        if let Err(e) = message.set_msgstr(t.msgstr.clone()) {
+            errors.push(format!("Failed to set msgstr for '{}': {e}", t.msgid));
+            continue;
+        }
+        if message.is_fuzzy() {
+            message.flags_mut().remove_flag(po_parser::fuzzy_flag());
+        }
+        updated += 1;
     }
 
     if !dry_run {
@@ -240,14 +201,15 @@ fn print_human(o: &ValidateAndUpdateOutput, dry_run: bool) {
 
     if let Some(u) = &o.update {
         println!("\n{}", "Update".bold().underline());
-        println!(
-            "  File: {}",
-            u.file_path.cyan()
-        );
+        println!("  File: {}", u.file_path.cyan());
         println!(
             "  Updated: {}  Dry-run: {}",
             u.updated_entries.to_string().green(),
-            if dry_run { "yes".yellow() } else { "no".green() }
+            if dry_run {
+                "yes".yellow()
+            } else {
+                "no".green()
+            }
         );
         if !u.errors.is_empty() {
             println!("  {}", "Errors:".red().bold());
@@ -259,14 +221,5 @@ fn print_human(o: &ValidateAndUpdateOutput, dry_run: bool) {
 
     if !o.message.is_empty() {
         println!("\n{} {}", "→".bold(), o.message);
-    }
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let cut: String = s.chars().take(max).collect();
-        format!("{cut}...")
     }
 }

@@ -1,6 +1,9 @@
 # po-cli
 
-Rust CLI for analyzing and updating Django gettext `.po` files. Sibling of [po-mcp](../../mcp/po-mcp) with the same validation rules and update semantics, but as a standalone binary.
+[![CI](https://github.com/omert11/po-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/omert11/po-cli/actions/workflows/ci.yml)
+[![Release](https://github.com/omert11/po-cli/actions/workflows/release.yml/badge.svg)](https://github.com/omert11/po-cli/actions/workflows/release.yml)
+
+Rust CLI for analyzing and updating Django gettext `.po` files. Same validation rules and update semantics as the [po-mcp](https://github.com/omert11/po-mcp) MCP server, packaged as a single static binary.
 
 ## Features
 
@@ -10,17 +13,48 @@ Rust CLI for analyzing and updating Django gettext `.po` files. Sibling of [po-m
 - Strict validation, `--dry-run`, `--force` flags
 - Single static binary (release ~1MB, no runtime)
 
-## Build
-
-```bash
-cargo build --release
-# binary: ./target/release/po-cli
-```
-
 ## Install
 
+### Prebuilt binaries (recommended)
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/omert11/po-cli/releases/latest):
+
+| Platform | Archive |
+|----------|---------|
+| Linux x86_64 | `po-cli-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux aarch64 | `po-cli-aarch64-unknown-linux-gnu.tar.gz` |
+| macOS x86_64 (Intel) | `po-cli-x86_64-apple-darwin.tar.gz` |
+| macOS aarch64 (Apple Silicon) | `po-cli-aarch64-apple-darwin.tar.gz` |
+| Windows x86_64 | `po-cli-x86_64-pc-windows-msvc.zip` |
+
+Quick install (Linux/macOS):
+
 ```bash
-cargo install --path .
+TARGET=$(rustc -vV 2>/dev/null | sed -n 's/host: //p')
+[ -z "$TARGET" ] && TARGET=$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
+curl -L "https://github.com/omert11/po-cli/releases/latest/download/po-cli-${TARGET}.tar.gz" \
+  | tar xz -C /tmp \
+  && sudo mv /tmp/po-cli /usr/local/bin/po-cli \
+  && po-cli --version
+```
+
+Or grab the asset URL manually with `gh release view --repo omert11/po-cli`.
+
+### From source (cargo)
+
+Requires Rust 1.70+:
+
+```bash
+cargo install --git https://github.com/omert11/po-cli
+```
+
+### Build locally
+
+```bash
+git clone https://github.com/omert11/po-cli
+cd po-cli
+cargo build --release
+# binary: ./target/release/po-cli
 ```
 
 ## Usage
