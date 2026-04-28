@@ -27,14 +27,17 @@ pub fn parse(path: &Path) -> Result<ParsedPo> {
     let mut total = 0usize;
 
     for message in catalog.messages() {
-        total += 1;
-        let is_fuzzy = message.is_fuzzy();
-        let msgstr_empty = message.msgstr().map(|s| s.is_empty()).unwrap_or(true);
+        if is_header(message) {
+            continue;
+        }
 
-        if is_fuzzy {
+        total += 1;
+        let is_untranslated = msgstr_is_empty(message);
+
+        if message.is_fuzzy() {
             fuzzy += 1;
             fuzzy_entries.push(message_to_entry(message));
-        } else if msgstr_empty {
+        } else if is_untranslated {
             untranslated += 1;
             untranslated_entries.push(message_to_entry(message));
         } else {
@@ -81,6 +84,20 @@ pub fn parse_cleaned(path: &Path) -> Result<Catalog> {
     catalog
 }
 
+fn is_header(m: &dyn MessageView) -> bool {
+    m.msgid().is_empty()
+}
+
+fn msgstr_is_empty(m: &dyn MessageView) -> bool {
+    if m.is_singular() {
+        m.msgstr().map(|s| s.is_empty()).unwrap_or(true)
+    } else {
+        m.msgstr_plural()
+            .map(|forms| forms.is_empty() || forms.iter().any(|s| s.is_empty()))
+            .unwrap_or(true)
+    }
+}
+
 fn message_to_entry(m: &dyn MessageView) -> PoEntry {
     let msgstr = if m.is_singular() {
         m.msgstr().unwrap_or("").to_string()
@@ -114,4 +131,86 @@ fn preprocess_po_content(content: &str) -> String {
         .filter(|line| !line.trim_start().starts_with("#~|"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_temp_po(content: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "po-cli-test-{}-{}.po",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut f = fs::File::create(&path).unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        path
+    }
+
+    const HEADER: &str = r#"msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+"#;
+
+    #[test]
+    fn header_entry_is_skipped() {
+        let po = format!("{}msgid \"Hello\"\nmsgstr \"Merhaba\"\n", HEADER);
+        let path = write_temp_po(&po);
+        let parsed = parse(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(parsed.statistics.total, 1);
+        assert_eq!(parsed.statistics.translated, 1);
+        assert_eq!(parsed.statistics.untranslated, 0);
+        assert!(parsed.untranslated_entries.is_empty());
+    }
+
+    #[test]
+    fn plural_with_all_forms_filled_is_translated() {
+        let po = format!(
+            "{}msgid \"%(n)s ticket\"\nmsgid_plural \"%(n)s tickets\"\nmsgstr[0] \"%(n)s bilet\"\nmsgstr[1] \"%(n)s bilet\"\n",
+            HEADER
+        );
+        let path = write_temp_po(&po);
+        let parsed = parse(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(parsed.statistics.translated, 1);
+        assert_eq!(parsed.statistics.untranslated, 0);
+        assert!(parsed.untranslated_entries.is_empty());
+    }
+
+    #[test]
+    fn plural_with_empty_form_is_untranslated() {
+        let po = format!(
+            "{}msgid \"%(n)s ticket\"\nmsgid_plural \"%(n)s tickets\"\nmsgstr[0] \"%(n)s bilet\"\nmsgstr[1] \"\"\n",
+            HEADER
+        );
+        let path = write_temp_po(&po);
+        let parsed = parse(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(parsed.statistics.untranslated, 1);
+        assert_eq!(parsed.statistics.translated, 0);
+        assert_eq!(parsed.untranslated_entries.len(), 1);
+        assert_eq!(parsed.untranslated_entries[0].msgid, "%(n)s ticket");
+    }
+
+    #[test]
+    fn singular_empty_msgstr_is_untranslated() {
+        let po = format!("{}msgid \"Hello\"\nmsgstr \"\"\n", HEADER);
+        let path = write_temp_po(&po);
+        let parsed = parse(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(parsed.statistics.untranslated, 1);
+        assert_eq!(parsed.untranslated_entries[0].msgid, "Hello");
+    }
 }
