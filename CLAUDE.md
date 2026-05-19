@@ -46,7 +46,7 @@ src/
 ├── parser/po_parser.rs  polib wrapper + #~| preprocess
 ├── validator.rs         regex pattern check (vars/HTML/URL/JS)
 └── commands/
-    ├── analyze.rs       statistics + untranslated/fuzzy listele
+    ├── analyze.rs       statistics + untranslated/fuzzy/obsolete listele
     └── update.rs        validate + apply (dry-run/force destekli)
 
 skills/po-cli/SKILL.md   Claude Code skill (translation workflow)
