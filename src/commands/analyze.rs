@@ -14,6 +14,7 @@ pub fn run(po_file: &Path, json: bool) -> Result<()> {
         statistics: parsed.statistics,
         untranslated_entries: parsed.untranslated_entries,
         fuzzy_entries: parsed.fuzzy_entries,
+        obsolete_entries: parsed.obsolete_entries,
     };
 
     if json {
@@ -41,10 +42,15 @@ fn print_human(o: &AnalyzeOutput) {
         "  Fuzzy:        {}",
         o.statistics.fuzzy.to_string().yellow()
     );
+    println!(
+        "  Obsolete:     {}",
+        o.statistics.obsolete.to_string().red()
+    );
     println!("  Total:        {}", o.statistics.total.to_string().bold());
 
     print_section("Untranslated", &o.untranslated_entries);
     print_section("Fuzzy", &o.fuzzy_entries);
+    print_section("Obsolete", &o.obsolete_entries);
 }
 
 fn print_section(label: &str, entries: &[crate::types::PoEntry]) {

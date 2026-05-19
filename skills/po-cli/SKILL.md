@@ -53,15 +53,18 @@ po-cli --json analyze <po_file_path> > /tmp/po-cli-analysis.json
 ```json
 {
   "file_path": "...",
-  "statistics": { "translated": N, "untranslated": N, "fuzzy": N, "total": N },
+  "statistics": { "translated": N, "untranslated": N, "fuzzy": N, "obsolete": N, "total": N },
   "untranslated_entries": [{ "msgid": "...", "msgstr": "", "context": null }],
-  "fuzzy_entries": [...]
+  "fuzzy_entries": [...],
+  "obsolete_entries": [{ "msgid": "...", "msgstr": "...", "context": null }]
 }
 ```
 
-İstatistiği kullanıcıya kısa bildir: `2881 translated, 2 untranslated, 0 fuzzy`.
+İstatistiği kullanıcıya kısa bildir: `2881 translated, 2 untranslated, 0 fuzzy, 2 obsolete`.
 
-`untranslated_entries.length === 0 && fuzzy_entries.length === 0` ise dur, "tüm entry'ler çevrili" raporla.
+`obsolete > 0` ise kullanıcıyı uyar: bu msgid'ler `compilemessages` tarafından `.mo` dosyasına yazılmaz, runtime'da çeviri kaybı oluşur. Sebep genelde source'tan silinmiş template/string'dir — restore + `makemessages` ile yeniden aktive edilebilir.
+
+`untranslated_entries.length === 0 && fuzzy_entries.length === 0` ise dur, "tüm entry'ler çevrili" raporla (obsolete uyarısını yine ver).
 
 ### 3. Çeviriyi Üret
 

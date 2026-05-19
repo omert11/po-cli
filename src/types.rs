@@ -12,6 +12,7 @@ pub struct PoStatistics {
     pub translated: usize,
     pub untranslated: usize,
     pub fuzzy: usize,
+    pub obsolete: usize,
     pub total: usize,
 }
 
@@ -21,6 +22,7 @@ pub struct AnalyzeOutput {
     pub statistics: PoStatistics,
     pub untranslated_entries: Vec<PoEntry>,
     pub fuzzy_entries: Vec<PoEntry>,
+    pub obsolete_entries: Vec<PoEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
