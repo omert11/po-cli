@@ -120,11 +120,18 @@ po-cli update <po_file_path> -t /tmp/po-cli-translations.json --dry-run
 po-cli update <po_file_path> -t /tmp/po-cli-translations.json
 ```
 
-`update.success === true` ve `update.errors` boşsa raporla:
+`update.success === true` ve `update.errors` boşsa, JSON çıktısındaki sayıları **eksiksiz** raporla:
 
 ```
-Updated N translations.
+Updated <update.updated_entries> translations.
 ```
+
+**ÖNEMLİ — `skipped_entries`/`not_found_entries` kontrolü**: `update.skipped_entries > 0` ise bazı entry'ler yazılmadı; bunu kullanıcıdan gizleme:
+
+- `not_found_entries > 0` → o (context, msgid) `.po` dosyasında yok (stale msgid / yanlış context). translations.json güncel mi kontrol et.
+- `skipped_entries - not_found_entries > 0` → plural/form sayısı uyuşmazlığı (verilen form sayısı `nplurals` ile eşleşmiyor). Plural entry'ler artık YAZILIR; uyuşmazlık varsa dilin `nplurals` değerine göre doğru form sayısıyla yeniden çevir.
+
+`updated + skipped == toplam istenen` olmalı; tutmuyorsa duplicate input olabilir.
 
 ### 7. compilemessages Öner
 
@@ -149,7 +156,7 @@ python manage.py update_translation_fields
 - `PO file not found` → path doğru mu kontrol et, kullanıcıdan teyit al
 - `Translations JSON must be an array` → `/tmp/po-cli-translations.json` formatı bozuk, yeniden yaz
 - `Failed to parse PO file` → dosya bozuk olabilir, `--no-strict` denemek yerine kullanıcıya bildir
-- `Validation failed: N invalid` → çevirileri düzelt, dry-run'ı tekrar çalıştır
+- `Validation failed: all N invalid` → hiçbir entry geçerli değil, hepsini düzelt, dry-run'ı tekrar çalıştır. (Kısmi geçersizlikte geçerli entry'ler yine de uygulanır; `validation.invalids` doluysa düzelt ve tekrar dene.)
 
 ## Toplu Çeviri (Çok Sayıda Entry)
 

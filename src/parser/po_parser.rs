@@ -138,6 +138,26 @@ pub fn fuzzy_flag() -> &'static str {
     FUZZY_FLAG
 }
 
+/// Separator used to flatten plural `msgstr[N]` forms into a single string
+/// (matches the join used by `analyze`). Callers split on this to recover forms.
+pub fn plural_separator() -> &'static str {
+    PLURAL_SEP
+}
+
+/// Extract the raw obsolete (`#~`) block lines from PO content.
+///
+/// polib does not round-trip obsolete entries through `write_to_file`, so we
+/// capture them here as raw text and re-append after writing to avoid data loss.
+pub fn extract_obsolete_block(content: &str) -> String {
+    let mut lines: Vec<&str> = Vec::new();
+    for line in content.lines() {
+        if line.trim_start().starts_with("#~") {
+            lines.push(line);
+        }
+    }
+    lines.join("\n")
+}
+
 fn preprocess_po_content(content: &str) -> String {
     let mut out = String::with_capacity(content.len());
     let mut first = true;

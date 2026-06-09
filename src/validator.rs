@@ -23,10 +23,10 @@ fn patterns() -> &'static Patterns {
         django_tag: Regex::new(r"\{%[^%]+%\}").unwrap(),
         html_tag: Regex::new(r"<[^>]+>").unwrap(),
         url: Regex::new(r#"https?://[^\s<>"]+|www\.[^\s<>"]+"#).unwrap(),
-        js_code: Regex::new(
-            r#"(?:[a-zA-Z_$][\w$]*\.)*[a-zA-Z_$][\w$]*\s*\([^)]*['"`]|(?:[a-zA-Z_$][\w$]*\.)+[a-zA-Z_$][\w$]*\s*\([^)]*\)"#,
-        )
-        .unwrap(),
+        // Require at least one dotted member access before the call (e.g. `obj.method(...)`)
+        // so plain parenthesised prose like "(Optional)" or "(e.g. '1.0', '1.1')" is not
+        // mistaken for JavaScript code.
+        js_code: Regex::new(r#"(?:[a-zA-Z_$][\w$]*\.)+[a-zA-Z_$][\w$]*\s*\([^)]*\)"#).unwrap(),
     })
 }
 
@@ -131,5 +131,61 @@ fn check_exact(label: &str, src: &HashSet<&str>, tgt: &HashSet<&str>, issues: &m
     }
     for url in tgt.difference(src) {
         issues.push(format!("Unexpected new {label}: {url}"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::TranslationEntry;
+
+    fn entry(msgid: &str, msgstr: &str) -> TranslationEntry {
+        TranslationEntry {
+            msgid: msgid.to_string(),
+            msgstr: msgstr.to_string(),
+            context: None,
+        }
+    }
+
+    #[test]
+    fn parenthesised_prose_is_not_js_code() {
+        // Bug B: "(Optional)" / "(e.g. '1.0', '1.1')" must not be flagged as JS.
+        let t = vec![
+            entry("Save (Optional)", "Kaydet (İsteğe bağlı)"),
+            entry("Version (e.g. '1.0', '1.1')", "Sürüm (örn. '1.0', '1.1')"),
+        ];
+        let out = validate(&t, true);
+        assert!(out.valid, "unexpected invalids: {:?}", out.invalids);
+    }
+
+    #[test]
+    fn real_js_call_is_still_detected() {
+        // Dotted member call must still be caught when dropped in translation.
+        let t = vec![entry("Run obj.method('x') now", "Çalıştır şimdi")];
+        let out = validate(&t, true);
+        assert!(!out.valid);
+        assert!(out.invalids[0]
+            .issues
+            .iter()
+            .any(|i| i.contains("JavaScript code")));
+    }
+
+    #[test]
+    fn variable_mismatch_still_flagged() {
+        let t = vec![entry("Hello %(name)s", "Merhaba")];
+        let out = validate(&t, true);
+        assert!(!out.valid);
+        assert!(out.invalids[0]
+            .issues
+            .iter()
+            .any(|i| i.contains("Missing variables")));
+    }
+
+    #[test]
+    fn empty_translation_flagged_even_without_strict() {
+        let t = vec![entry("Hello", "")];
+        let out = validate(&t, false);
+        assert!(!out.valid);
+        assert!(out.invalids[0].issues.iter().any(|i| i.contains("empty")));
     }
 }

@@ -50,6 +50,10 @@ pub struct ValidationOutput {
 pub struct UpdateResult {
     pub success: bool,
     pub updated_entries: usize,
+    /// Requested entries that could not be written (form mismatch or msgid not in catalog).
+    pub skipped_entries: usize,
+    /// Requested keys whose (context, msgid) was not present in the catalog.
+    pub not_found_entries: usize,
     pub file_path: String,
     pub errors: Vec<String>,
 }
