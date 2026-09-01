@@ -2,5 +2,7 @@
 solo.yml
 .DS_Store
 *.swp
-CLAUDE.local.md
 .claude/settings.local.json
+
+# Ajan proje baglami (yerel, birlesik)
+AGENTS.md
